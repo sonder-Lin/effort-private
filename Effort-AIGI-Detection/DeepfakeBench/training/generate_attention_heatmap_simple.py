@@ -179,28 +179,13 @@ def visualize_and_save(attention_map, image, save_path, title="", alpha=0.5,
     
     overlay = (image_rgb * (1 - alpha) + heatmap_rgb * alpha).astype(np.uint8)
     
-    # 绘制3张图: 原图 | 热力图 | 叠加图
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    axes[0].imshow(image_rgb)
-    axes[0].set_title('Original', fontsize=14)
-    axes[0].axis('off')
-    
-    im = axes[1].imshow(attention_norm, cmap='jet', vmin=0, vmax=1)
-    axes[1].set_title('Attention Heatmap (Last Layer)', fontsize=14)
-    axes[1].axis('off')
-    cbar = plt.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=10)
-    
-    axes[2].imshow(overlay)
-    axes[2].set_title('Overlay', fontsize=14)
-    axes[2].axis('off')
-    
-    if title:
-        fig.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
+    # 只保存叠加图
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    ax.imshow(overlay)
+    ax.axis('off')
     
     plt.tight_layout()
-    plt.savefig(save_path, dpi=200, bbox_inches='tight', facecolor='white')
+    plt.savefig(save_path, dpi=200, bbox_inches='tight', pad_inches=0, facecolor='white')
     plt.close()
 
 
