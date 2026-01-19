@@ -264,6 +264,61 @@ def main():
     print("="*60)
     print(f"所有热力图已保存到: {args.output_dir}")
     print("="*60)
+    
+    # 生成6张图的一行拼接PDF
+    print("\n生成拼接图PDF...")
+    create_combined_pdf(args.output_dir)
+
+
+def create_combined_pdf(output_dir):
+    """将6张叠加图水平拼接成一行，输出高保真矢量PDF"""
+    from matplotlib.backends.backend_pdf import PdfPages
+    
+    # 按顺序读取6张图
+    image_labels = [
+        "Asian-Male_Fake",
+        "White-Male_Fake",
+        "Black-Female_Fake_6477",
+        "Asian-Female_Real",
+        "White-Female_Fake",
+        "Black-Female_Fake_7430",
+    ]
+    
+    images = []
+    valid_labels = []
+    for label in image_labels:
+        img_path = os.path.join(output_dir, f"{label}_attention.png")
+        if os.path.exists(img_path):
+            img = cv2.imread(img_path)
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            images.append(img_rgb)
+            valid_labels.append(label)
+    
+    if not images:
+        print("没有找到图片，跳过PDF生成")
+        return
+    
+    n = len(images)
+    
+    # 创建高保真PDF
+    pdf_path = os.path.join(output_dir, "attention_heatmaps_combined.pdf")
+    
+    fig, axes = plt.subplots(1, n, figsize=(4*n, 4))
+    if n == 1:
+        axes = [axes]
+    
+    for i, (img, label) in enumerate(zip(images, valid_labels)):
+        axes[i].imshow(img)
+        axes[i].set_title(label.replace("_", " "), fontsize=10)
+        axes[i].axis('off')
+    
+    plt.tight_layout()
+    
+    # 保存为矢量PDF
+    plt.savefig(pdf_path, format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.1)
+    plt.close()
+    
+    print(f"[✓] 拼接PDF已保存: {pdf_path}")
 
 
 if __name__ == "__main__":
