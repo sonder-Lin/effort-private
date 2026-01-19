@@ -26,7 +26,6 @@ build/
 *.h5
 
 # Output
-attention_heatmaps/
 logs/
 *.log
 
