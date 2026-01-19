@@ -122,8 +122,21 @@ def get_last_layer_attention(model, image_tensor):
     return cls_attn[0].cpu().numpy()  # (num_patches,)
 
 
-def visualize_and_save(attention_map, image, save_path, title="", alpha=0.5):
-    """可视化注意力热力图并保存"""
+def visualize_and_save(attention_map, image, save_path, title="", alpha=0.5, 
+                        blur_ksize=0, threshold=0.0, gamma=1.0):
+    """
+    可视化注意力热力图并保存
+    
+    Args:
+        attention_map: 注意力权重
+        image: 原始图像
+        save_path: 保存路径
+        title: 标题
+        alpha: 叠加透明度 (0-1)
+        blur_ksize: 高斯模糊核大小 (0=不模糊, 推荐 15, 21, 31 等奇数)
+        threshold: 阈值，低于此值的注意力会被抑制 (0-1, 推荐 0.3-0.5)
+        gamma: gamma校正，<1会增强低值，>1会增强高值 (推荐 1.5-2.0 让高注意力更集中)
+    """
     # ViT-L/14: 224x224图像, patch_size=14, 得到16x16=256个patches
     num_patches = attention_map.shape[0]
     grid_size = int(np.sqrt(num_patches))
@@ -131,11 +144,31 @@ def visualize_and_save(attention_map, image, save_path, title="", alpha=0.5):
     attention_map_2d = attention_map.reshape(grid_size, grid_size)
     
     h, w = image.shape[:2]
-    attention_resized = cv2.resize(attention_map_2d.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+    attention_resized = cv2.resize(attention_map_2d.astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
     
     # 归一化到0-1
     att_min, att_max = attention_resized.min(), attention_resized.max()
     attention_norm = (attention_resized - att_min) / (att_max - att_min + 1e-8)
+    
+    # 应用阈值 - 低于阈值的设为0
+    if threshold > 0:
+        attention_norm = np.where(attention_norm < threshold, 0, attention_norm)
+        # 重新归一化
+        if attention_norm.max() > 0:
+            attention_norm = attention_norm / attention_norm.max()
+    
+    # 应用gamma校正 - gamma>1会让高值更突出
+    if gamma != 1.0:
+        attention_norm = np.power(attention_norm, gamma)
+    
+    # 应用高斯模糊 - 让热力图更平滑
+    if blur_ksize > 0:
+        if blur_ksize % 2 == 0:
+            blur_ksize += 1  # 确保是奇数
+        attention_norm = cv2.GaussianBlur(attention_norm, (blur_ksize, blur_ksize), 0)
+        # 模糊后重新归一化
+        attention_norm = (attention_norm - attention_norm.min()) / (attention_norm.max() - attention_norm.min() + 1e-8)
+    
     attention_uint8 = (attention_norm * 255).astype(np.uint8)
     
     # 生成热力图
@@ -180,6 +213,15 @@ def main():
                         help="effort模型权重路径")
     parser.add_argument("--output_dir", type=str, default="./attention_heatmaps",
                         help="输出目录")
+    # 可视化参数
+    parser.add_argument("--alpha", type=float, default=0.5,
+                        help="叠加透明度 (0-1, 默认0.5)")
+    parser.add_argument("--blur", type=int, default=0,
+                        help="高斯模糊核大小 (0=不模糊, 推荐15/21/31)")
+    parser.add_argument("--threshold", type=float, default=0.0,
+                        help="阈值, 低于此值的注意力被抑制 (0-1, 推荐0.3-0.5)")
+    parser.add_argument("--gamma", type=float, default=1.0,
+                        help="gamma校正, >1让高注意力更集中 (推荐1.5-2.0)")
     args = parser.parse_args()
     
     os.makedirs(args.output_dir, exist_ok=True)
@@ -192,7 +234,8 @@ def main():
     
     # 处理每张图片
     print(f"\n开始处理 {len(IMAGE_LIST)} 张图片...")
-    print("方法: 最后一层attention, CLS→patches, heads平均\n")
+    print("方法: 最后一层attention, CLS→patches, heads平均")
+    print(f"可视化参数: alpha={args.alpha}, blur={args.blur}, threshold={args.threshold}, gamma={args.gamma}\n")
     
     for i, item in enumerate(IMAGE_LIST, 1):
         img_path = item["path"]
@@ -215,7 +258,9 @@ def main():
             
             # 保存热力图
             save_path = os.path.join(args.output_dir, f"{label}_attention.png")
-            visualize_and_save(attention_map, img, save_path, title=label)
+            visualize_and_save(attention_map, img, save_path, title=label,
+                             alpha=args.alpha, blur_ksize=args.blur, 
+                             threshold=args.threshold, gamma=args.gamma)
             print(f"     ✓ 已保存: {save_path}")
             
             # 模型推理获取预测结果
